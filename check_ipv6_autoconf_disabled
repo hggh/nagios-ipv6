@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+INTERFACES_BLACKLIST = [ 'tun0', 'tun1', 'tun2' ]
+# Jonas Genannt <jonas@brachium-system.net>
+
+def check_ipv6_autoconf(interface_directory)
+  accept_ra = File.read(File.join(interface_directory, "accept_ra")).chomp
+  autoconf = File.read(File.join(interface_directory, "autoconf")).chomp
+  if accept_ra == "0" and autoconf == "0"
+    return true
+  end
+  false
+end
+
+interfaces = Hash.new
+interfaces[:blacklisted] = Array.new
+interfaces[:ok] = Array.new
+interfaces[:critical] = Array.new
+
+Dir.glob("/proc/sys/net/ipv6/conf/*").each do |dir|
+  interface_name = File.basename(dir)
+  next if interface_name =~ /\A(default|all|lo)\Z/
+  if INTERFACES_BLACKLIST.include?(interface_name)
+    interfaces[:blacklisted] << interface_name
+    next
+  end
+  if check_ipv6_autoconf(dir) == true
+    interfaces[:ok] << interface_name
+  else
+    interfaces[:critical] << interface_name
+  end
+end
+
+output_backlisted = ""
+if interfaces[:blacklisted].count > 0
+  output_backlisted = "Int blacklisted: " + interfaces[:blacklisted].join(' ')
+end
+
+if interfaces[:critical].count > 0
+  puts "CRITICAL: Int IPv6 autoconf enabled: #{interfaces[:critical].join(' ')} Int IPv6 autoconf disabled: #{interfaces[:ok].join(' ')} (#{interfaces[:ok].count}) " + output_backlisted
+  exit 2
+else
+  puts "OK: Int IPv6 autoconf disabled: #{interfaces[:ok].join(' ')} (#{interfaces[:ok].count}) " + output_backlisted
+end
+
